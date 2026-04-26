@@ -66,7 +66,8 @@ RUN git clone --depth=1 -b "$CYCLONEDDS_REF" \
 RUN git clone https://github.com/unitreerobotics/unitree_sdk2_python.git \
         /opt/unitree_sdk2_python \
     && git -C /opt/unitree_sdk2_python checkout "$UNITREE_SDK2_PYTHON_REF" \
-    && /app/.venv/bin/pip install --no-cache-dir -e /opt/unitree_sdk2_python
+    && uv pip install --python /app/.venv/bin/python --no-cache \
+           -e /opt/unitree_sdk2_python
 
 # ---------------------------------------------------------------------------
 # Compile stage: copy source, byte-compile with PEP 488-disabled names so the
