@@ -9,7 +9,7 @@
 #
 # Build via `make dist-build`; push via `make dist-push`.
 
-FROM python:3.10-slim AS base
+FROM python:3.10-slim-bookworm AS base
 
 ENV PYTHONDONTWRITEBYTECODE=0 \
     PYTHONUNBUFFERED=1 \
@@ -46,23 +46,21 @@ ENV VIRTUAL_ENV=/app/.venv \
     PATH="/app/.venv/bin:${PATH}"
 
 # Unitree G1 SDK + its cyclonedds C dependency. cyclonedds isn't packaged in
-# Debian at the version the SDK requires (0.10.x), and unitree_sdk2_python is
-# not on PyPI — both are built from source. See docs/INSTALL_UNITREE_SDK.md
-# for the host-install recipe this mirrors.
+# Debian at the version the SDK requires, and unitree_sdk2_python is not on
+# PyPI — both are built from source. The cyclonedds recipe matches the
+# Unitree FAQ at https://github.com/unitreerobotics/unitree_sdk2_python:
+# track the `releases/0.10.x` branch and run cmake with only the install
+# prefix (no BUILD_IDLC=NO — that flag tickles a 0.10.2 ddsperf bug).
 #
-# Both refs are pinned to immutable revisions so two rebuilds of the same
-# omakaseos commit produce byte-identical SDK layers. Bump these by hand
-# after vetting an upstream change.
-ARG CYCLONEDDS_REF=0.10.2
+# UNITREE_SDK2_PYTHON_REF is pinned to a commit; bump it by hand after
+# vetting an upstream change.
+ARG CYCLONEDDS_REF=releases/0.10.x
 ARG UNITREE_SDK2_PYTHON_REF=db9b2d210081387fcd1e7ed9ac4c56a02983bb85
 ENV CYCLONEDDS_HOME=/opt/cyclonedds
 RUN git clone --depth=1 -b "$CYCLONEDDS_REF" \
         https://github.com/eclipse-cyclonedds/cyclonedds /tmp/cyclonedds \
     && cmake -S /tmp/cyclonedds -B /tmp/cyclonedds/build \
              -DCMAKE_INSTALL_PREFIX=$CYCLONEDDS_HOME \
-             -DBUILD_IDLC=NO \
-             -DBUILD_TESTING=NO \
-             -DBUILD_EXAMPLES=NO \
     && cmake --build /tmp/cyclonedds/build --target install -j"$(nproc)" \
     && rm -rf /tmp/cyclonedds
 RUN git clone https://github.com/unitreerobotics/unitree_sdk2_python.git \

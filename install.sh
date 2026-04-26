@@ -15,7 +15,10 @@
 #
 # Re-running install.sh with --upgrade does not re-prompt for credentials.
 # Re-running with --uninstall stops the stack and removes the systemd units
-# (kept: /etc/omakase/*, /opt/omakase/*).
+# (kept: /etc/omakase/*, /opt/omakase/*, the docker image, the data volume).
+# Re-running with --purge does --uninstall AND wipes the image, the
+# `omakase-data` volume, /etc/omakase, /opt/omakase, and the omakase-ota
+# symlink. Destructive — the operator must reissue license.json afterwards.
 #
 # Usage:
 #   sudo ./install.sh                   # first-time install, prompts for robot creds
@@ -23,6 +26,8 @@
 #   sudo ./install.sh --tag v1.4.2      # pin a specific image tag (first install)
 #   sudo ./install.sh --upgrade         # re-render config + restart units (no re-prompt)
 #   sudo ./install.sh --uninstall       # stop stack, remove systemd units
+#   sudo ./install.sh --purge           # uninstall + wipe image, data volume, config
+#   sudo ./install.sh --purge --yes     # purge without the confirmation prompt
 #   sudo ./install.sh --no-wifi-setup   # skip the fallback-AP unit (workstation/dev hosts)
 #
 # Environment overrides (rare):
@@ -48,6 +53,7 @@ CONV_VERSION="${OMAKASE_CONV_VERSION:-v2}"
 EXPLICIT_CONV_VERSION=0
 REQUESTED_TAG=""
 SKIP_WIFI_SETUP="${OMAKASE_SKIP_WIFI_SETUP:-0}"
+ASSUME_YES=0
 
 OMAKASE_CONFIG_DIR="${OMAKASE_CONFIG_DIR:-/etc/omakase}"
 OMAKASE_WIFI_SETUP_DIR="${OMAKASE_WIFI_SETUP_DIR:-/opt/omakase/wifi-setup}"
@@ -80,8 +86,10 @@ while [ $# -gt 0 ]; do
         --tag=*)       REQUESTED_TAG="${1#*=}"; shift;;
         --upgrade)     MODE="upgrade"; shift;;
         --uninstall)   MODE="uninstall"; shift;;
+        --purge)       MODE="purge"; shift;;
+        --yes|-y)      ASSUME_YES=1; shift;;
         --no-wifi-setup) SKIP_WIFI_SETUP=1; shift;;
-        -h|--help)     sed -n '2,32p' "$0"; exit 0;;
+        -h|--help)     sed -n '2,36p' "$0"; exit 0;;
         *)             echo "Unknown argument: $1" >&2; exit 2;;
     esac
 done
@@ -114,19 +122,75 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------------------
-# Uninstall: stop units, leave /etc/omakase + /opt/omakase intact so a later
-# reinstall is idempotent. We never wipe license.json without the operator
-# deliberately removing it.
+# Uninstall / purge.
+#   --uninstall: stop units, leave /etc/omakase + /opt/omakase + image +
+#     data volume intact so a later reinstall is idempotent. We never wipe
+#     license.json without the operator deliberately removing it.
+#   --purge:     same as --uninstall, then remove the docker image, the
+#     `omakase-data` named volume (robot logs/cache), the helper scripts,
+#     the omakase-ota symlink, and the config dirs. Destructive: the
+#     operator must reissue license.json before reinstalling.
 # ---------------------------------------------------------------------------
-if [ "$MODE" = "uninstall" ]; then
-    systemctl disable --now omakase-robot.service omakase-wifi-setup.service 2>/dev/null || true
-    if [ -f "$COMPOSE_FILE" ]; then
-        docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down 2>/dev/null || true
+if [ "$MODE" = "uninstall" ] || [ "$MODE" = "purge" ]; then
+    if [ "$MODE" = "purge" ] && [ "$ASSUME_YES" != "1" ]; then
+        echo "About to PURGE the Omakase stack from this host:"
+        echo "  - stop and remove systemd units"
+        echo "  - remove docker container, image, and the 'omakase-data' volume"
+        echo "  - delete $OMAKASE_CONFIG_DIR (license.json, runtime.env, robot.env, compose)"
+        echo "  - delete /opt/omakase (helper scripts, wifi-setup package)"
+        echo "  - remove /usr/local/bin/omakase-ota symlink"
+        echo
+        printf "Type 'PURGE' to confirm: "
+        read -r confirm
+        if [ "$confirm" != "PURGE" ]; then
+            echo "Aborted."
+            exit 1
+        fi
     fi
+
+    systemctl disable --now omakase-robot.service omakase-wifi-setup.service 2>/dev/null || true
+
+    # Capture the image ref before we delete robot.env, so purge can target it.
+    IMAGE_REF=""
+    if [ -f "$ENV_FILE" ]; then
+        IMAGE_REF="$(awk -F= '$1=="OMAKASE_IMAGE_REF"{print $2; exit}' "$ENV_FILE" 2>/dev/null || true)"
+    fi
+
+    if [ -f "$COMPOSE_FILE" ]; then
+        if [ "$MODE" = "purge" ]; then
+            # `down -v` also removes the named `omakase-data` volume declared
+            # in the compose file. Image removal is handled separately below
+            # because compose's `--rmi` doesn't reach the pulled ECR tag
+            # cleanly when env interpolation is missing.
+            docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down -v 2>/dev/null || true
+        else
+            docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down 2>/dev/null || true
+        fi
+    fi
+
     rm -f "$ROBOT_UNIT" "$WIFI_UNIT"
     systemctl daemon-reload
-    echo "Omakase stack stopped and systemd units removed."
-    echo "Config retained at $OMAKASE_CONFIG_DIR and $OMAKASE_WIFI_SETUP_DIR."
+
+    if [ "$MODE" = "uninstall" ]; then
+        echo "Omakase stack stopped and systemd units removed."
+        echo "Config retained at $OMAKASE_CONFIG_DIR and $OMAKASE_WIFI_SETUP_DIR."
+        exit 0
+    fi
+
+    # --- purge-only: remove image, leftover volume, helpers, config -------
+    if [ -n "$IMAGE_REF" ]; then
+        docker image rm "$IMAGE_REF" 2>/dev/null || true
+    fi
+    # Belt-and-suspenders: if the volume survived (e.g. compose file was
+    # already gone before --purge), drop it by name.
+    docker volume rm omakase-data 2>/dev/null || true
+
+    rm -f /usr/local/bin/omakase-ota
+    rm -rf "$OMAKASE_CONFIG_DIR" /opt/omakase
+
+    echo "Omakase stack purged."
+    echo "  Image, data volume, config, and helper scripts removed."
+    echo "  Reinstall requires a fresh license.json from the operator."
     exit 0
 fi
 
@@ -661,4 +725,5 @@ Commands:
   Status:            systemctl status omakase-robot.service
   Manual update:     sudo omakase-ota [--tag <version>]
   Uninstall:         sudo $0 --uninstall
+  Purge (wipe all):  sudo $0 --purge
 DONE
