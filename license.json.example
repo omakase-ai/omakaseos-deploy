@@ -1,0 +1,4 @@
+{
+  "robot_id":        "REPLACE_WITH_ROBOT_UUID",
+  "bootstrap_token": "oma_robot_REPLACE_WITH_TOKEN"
+}
