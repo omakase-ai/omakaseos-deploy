@@ -69,7 +69,7 @@ and every `omakase-ota` run.
 ### One-liner (preferred)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/omakase-ai/omakase-deploy/main/install.sh | sudo -E bash
+curl -fsSL https://raw.githubusercontent.com/omakase-ai/omakaseos-deploy/main/install.sh | sudo -E bash
 ```
 
 The installer prompts for `Robot ID` and `Robot bootstrap token`. Pass
@@ -78,7 +78,7 @@ be on `sudo` (not on `curl`), because in a pipeline `VAR=val cmd1 | cmd2`
 binds `VAR` to `cmd1` only:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/omakase-ai/omakase-deploy/main/install.sh \
+curl -fsSL https://raw.githubusercontent.com/omakase-ai/omakaseos-deploy/main/install.sh \
   | sudo ROBOT_ID=... ROBOT_BOOTSTRAP_TOKEN=oma_robot_... bash
 ```
 
@@ -86,7 +86,7 @@ To pin a specific image tag, append it as a flag (note the `--` so bash
 forwards args to the script):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/omakase-ai/omakase-deploy/main/install.sh \
+curl -fsSL https://raw.githubusercontent.com/omakase-ai/omakaseos-deploy/main/install.sh \
   | sudo -E bash -s -- --tag v1.4.2
 ```
 
@@ -283,8 +283,8 @@ you iterate on the helper scripts without rebuilding the payload between
 every test:
 
 ```
-Using local omakase-ecr-login.sh from /home/shu/Programs/omakase-deploy (override).
-Using local ota.sh from /home/shu/Programs/omakase-deploy (override).
+Using local omakase-ecr-login.sh from /home/shu/Programs/omakaseos-deploy (override).
+Using local ota.sh from /home/shu/Programs/omakaseos-deploy (override).
 ```
 
 When you're ready to ship, run `build-installer.sh` so the embedded
