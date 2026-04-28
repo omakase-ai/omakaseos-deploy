@@ -172,6 +172,23 @@ installs and runs normally.
 You can also set `OMAKASE_SKIP_WIFI_SETUP=1` in the environment instead of
 the flag.
 
+## WiFi setup overrides
+
+`/etc/omakase/wifi-setup.env` is read by `omakase-wifi-setup.service`.
+These values affect only the host-side fallback AP daemon, not the runtime
+container. The installer regenerates this file on `--upgrade`, so re-apply
+local tuning after upgrading if needed.
+
+Useful knobs:
+
+- `FALLBACK_AP_OFFLINE_GRACE_S` defaults to `120`. The watchdog waits this
+  many seconds after managed WiFi first appears offline before switching the
+  radio into fallback AP mode.
+- `FALLBACK_AP_CHECK_INTERVAL_S` defaults to `15`. This is the watchdog poll
+  interval.
+- `FALLBACK_AP_SSID`, `FALLBACK_AP_PASSWORD`, `FALLBACK_AP_IP_CIDR`,
+  `FALLBACK_AP_BAND`, and `FALLBACK_AP_CHANNEL` customize the setup network.
+
 ## Manual OTA
 
 ```bash
