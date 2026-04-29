@@ -265,6 +265,14 @@ upsert_runtime_env() {
     rm -f "$tmp"
 }
 
+# Append a default only when the operator has not already set the key.
+append_runtime_env_default_if_missing() {
+    local key="$1" value="$2"
+    if ! grep -Eq "^[[:space:]]*$key=" "$RUNTIME_ENV_FILE"; then
+        printf '%s=%s\n' "$key" "$value" >>"$RUNTIME_ENV_FILE"
+    fi
+}
+
 # If a license.json sits next to install.sh, lift robot_id + bootstrap_token
 # out of it so we don't have to prompt. Accepts the canonical "bootstrap_token"
 # key OR the legacy "api_key" key (both carry the same oma_robot_* token).
@@ -511,6 +519,7 @@ OMAKASE_API_URL=$OMAKASE_API_URL
 OMAKASE_CONV_VERSION=$CONV_VERSION
 LOCALE=${LOCALE:-ja}
 STATUS_SERVER_ENABLED=${STATUS_SERVER_ENABLED:-1}
+STATUS_PUSH_ENABLED=1
 BOOTSTRAP_STRICT=${BOOTSTRAP_STRICT:-1}
 # Optional: surface a runtime version string in heartbeats / OTA reports.
 # OMAKASE_RUNTIME_VERSION=
@@ -563,6 +572,15 @@ AWS_IOT_CA_PATH=/app/robot_stack/creds/amazon_root_ca.pem
 # === Visualization ===
 # FOXGLOVE_URL=
 
+# === Navigation stack integration ===
+# Temporary Docker socket path: omakase-robot operates the host Docker daemon
+# directly until this is replaced by an allowlisted host-side nav-control API.
+NAV_DEPLOY_DIR=/nav-autonomy-deploy
+MAPS_DIR=/nav-autonomy-deploy/maps
+# Leave unset while using Docker socket fallback. Future host-control mode:
+# OMAKASE_NAV_CONTROL_URL=http://127.0.0.1:9082
+# OMAKASE_NAV_CONTROL_TOKEN=
+
 # === Patrol recording ===
 # PATROL_RECORDING_DIR=recordings/patrol_video
 # PATROL_RECORDING_SEGMENT_SECONDS=300
@@ -580,6 +598,7 @@ RUNTIME
     fi
     echo "Seeded $RUNTIME_ENV_FILE — edit it to add provider API keys and feature flags."
 else
+    append_runtime_env_default_if_missing STATUS_PUSH_ENABLED 1
     if [ "$EXPLICIT_CONV_VERSION" = "1" ]; then
         upsert_runtime_env OMAKASE_CONV_VERSION "$CONV_VERSION"
         echo "Updated OMAKASE_CONV_VERSION in $RUNTIME_ENV_FILE → $CONV_VERSION."
@@ -624,6 +643,10 @@ services:
       - OMAKASE_SKIP_HOST_SETUP=1
     volumes:
       - /etc/omakase/license.json:/var/lib/omakase/license.json:ro
+      # Temporary nav-autonomy bridge: use host Docker directly until the
+      # allowlisted host-side nav-control service replaces Docker socket access.
+      - /opt/omakase/nav-autonomy-deploy:/nav-autonomy-deploy:rw
+      - /var/run/docker.sock:/var/run/docker.sock
       - ${XDG_RUNTIME_DIR:-/run/user/${OMAKASE_RUNTIME_UID:-1000}}/pulse:/run/pulse:ro
       - omakase-data:/var/lib/omakase
       - omakase-logs:/var/log/omakase

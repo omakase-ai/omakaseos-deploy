@@ -20,9 +20,11 @@ ENV PYTHONDONTWRITEBYTECODE=0 \
 # Unitree SDK build (git + cmake to compile cyclonedds from source).
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential \
+      ca-certificates \
       cmake \
       curl \
       git \
+      gnupg \
       libasound2-dev \
       portaudio19-dev \
       libegl1 \
@@ -35,6 +37,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libffi-dev \
       libssl-dev \
       pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Temporary nav-autonomy integration: the runtime container can operate the
+# host's Docker daemon via a mounted /var/run/docker.sock until the smaller
+# host-side nav-control service is ready.
+RUN install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && . /etc/os-release \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian ${VERSION_CODENAME} stable" \
+        > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+      docker-ce-cli \
+      docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

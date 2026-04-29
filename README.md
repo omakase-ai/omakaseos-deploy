@@ -237,6 +237,7 @@ out — uncomment and set what you need.
 | `OMAKASE_CONV_VERSION` | `v2` | `v1` to pin the legacy conversation engine |
 | `LOCALE` | `ja` | conversation locale (`ja` / `en` / …) |
 | `STATUS_SERVER_ENABLED` | `1` | `0` to disable the local status HTTP server |
+| `STATUS_PUSH_ENABLED` | `1` | `0` to stop pushing robot status to omakase.ai |
 | `BOOTSTRAP_STRICT` | `1` | `0` to tolerate a missing bootstrap snapshot |
 | `OMAKASE_RUNTIME_VERSION` | unset | surface a custom version string in heartbeats / OTA reports |
 | `DASHSCOPE_API_KEY` | image-baked | per-robot override of the Qwen STT/LLM key |
@@ -260,11 +261,53 @@ out — uncomment and set what you need.
 | `ANOMALY_ENABLED` | `0` | `1` to turn on the anomaly engine |
 | `ANOMALY_PRESET` | unset | named preset, e.g. `hospital_patrol` |
 | `FOXGLOVE_URL` | unset | Foxglove visualization URL |
+| `NAV_DEPLOY_DIR` | `/nav-autonomy-deploy` | container-side path for the mounted `nav-autonomy-deploy` checkout |
+| `MAPS_DIR` | `/nav-autonomy-deploy/maps` | container-side path for nav map listing and current-best-map sync |
+| `OMAKASE_NAV_CONTROL_URL` | unset | future host nav-control API; leave unset while using the temporary Docker socket fallback |
 | `PATROL_RECORDING_DIR` | `recordings/patrol_video` | container-side patrol video output |
 | `PATROL_RECORDING_SEGMENT_SECONDS` | `300` | patrol video segment length |
 | `PATROL_RECORDING_FPS` | `15` | patrol video framerate |
 | `DISABLE_S3_UPLOADS` | `0` | `1` to disable S3 telemetry uploads |
 | `AWS_IOT_ROLE_ALIAS` / `AWS_IOT_ENDPOINT` / `AWS_S3_BUCKET_NAME` / `AWS_S3_PUBLIC_BASE_URL` | unset | AWS IoT / S3 wiring (set together; certs are image-baked) |
+
+## Temporary nav-autonomy Docker socket integration
+
+The runtime compose currently bind-mounts:
+
+```yaml
+- /opt/omakase/nav-autonomy-deploy:/nav-autonomy-deploy:rw
+- /var/run/docker.sock:/var/run/docker.sock
+```
+
+This is a temporary bridge so the local UI and omakase.ai commands can reuse
+the existing allowlisted nav scripts from inside `omakase-robot`:
+
+```text
+/api/scripts/restart-nav-stack -> restart_nav_stack.sh -> docker compose up/down
+/api/scripts/stop-nav-stack    -> stop_nav_stack.sh    -> docker compose down
+```
+
+For new installs, `runtime.env` is seeded with:
+
+```env
+NAV_DEPLOY_DIR=/nav-autonomy-deploy
+MAPS_DIR=/nav-autonomy-deploy/maps
+```
+
+For existing robots, `runtime.env` is operator-managed and is not overwritten
+on `--upgrade`, so add the missing lines manually and restart:
+
+```bash
+sudo tee -a /etc/omakase/runtime.env >/dev/null <<'EOF'
+NAV_DEPLOY_DIR=/nav-autonomy-deploy
+MAPS_DIR=/nav-autonomy-deploy/maps
+EOF
+sudo systemctl restart omakase-robot.service
+```
+
+Leave `OMAKASE_NAV_CONTROL_URL` unset for this temporary path. Once the
+host-side nav-control service is shipped, set that URL and remove the Docker
+socket dependency from the compose template.
 
 ## Rebuilding the embedded payload (`build-installer.sh`)
 
