@@ -121,6 +121,34 @@ To stop the stack and remove the systemd units (keeps `/etc/omakase/*` and
 sudo ./install.sh --uninstall
 ```
 
+### Region
+
+On first install, the operator is prompted for the backend region:
+
+```
+Region [us/jp] (default: us): jp
+```
+
+| answer | resolves `OMAKASE_API_URL` to       |
+|--------|-------------------------------------|
+| `us`   | `https://www.omakase.ai`            |
+| `jp`   | `https://enterprise.jp.omakase.ai`  |
+
+For scripted / CI installs (no tty), set `OMAKASE_REGION=us|jp` ahead of
+time to skip the prompt:
+
+```bash
+sudo OMAKASE_REGION=jp ./install.sh
+```
+
+`OMAKASE_API_URL` set in the environment still wins over the region
+selection, which is the escape hatch for staging hosts. To switch an
+already-installed robot to a different backend, edit
+`/etc/omakase/runtime.env` directly and `sudo systemctl restart
+omakase-robot.service` — or re-run `sudo OMAKASE_REGION=jp ./install.sh
+--upgrade`, which upserts the new `OMAKASE_API_URL` into `runtime.env`
+without re-prompting.
+
 ## license.json
 
 `install.sh` and the runtime container both read `license.json`. The
@@ -213,7 +241,8 @@ gets seeded into `runtime.env` on first install.
 
 | variable | default | when to set |
 |---|---|---|
-| `OMAKASE_API_URL` | `https://www.omakase.ai` | staging/local backend |
+| `OMAKASE_REGION` | prompted on first install | `us` / `jp` — skips the region prompt and selects `OMAKASE_API_URL` |
+| `OMAKASE_API_URL` | derived from `OMAKASE_REGION` | staging/local backend (overrides region selection) |
 | `OMAKASE_CONV_VERSION` | `v2` | pin to legacy v1 conversation engine |
 | `OMAKASE_CONFIG_DIR` | `/etc/omakase` | non-default install layout |
 | `OMAKASE_WIFI_SETUP_DIR` | `/opt/omakase/wifi-setup` | non-default install layout |
