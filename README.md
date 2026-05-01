@@ -278,6 +278,12 @@ out — uncomment and set what you need.
 | `CONVERSATION_VLM_MODEL` | `gemini-2.5-flash-lite` | pin a different conversation VLM |
 | `CONVERSATION_LISTEN_EARLY_MARGIN_S` | `0` | tweak conversation barge-in margin |
 | `MAX_SESSION_DURATION_S` | `300` | cap a single conversation session in seconds |
+| `AUDIO_INPUT_GAIN_DB` | `12.0` (v2) / `0.0` (v1/v3) | digital gain (dB) on captured mic frames after the noise gate. v2 default tuned for the ReSpeaker 4 Mic Array; raise/lower per environment |
+| `AUDIO_NOISE_GATE_DB` | `-64.0` (v2) / off (v1/v3) | RMS gate threshold (dBFS) on raw mic frames; quieter frames are zeroed so steady fan/handling noise can't trigger VAD or be amplified. Set to `off` to disable |
+| `VOICE_OUTPUT_VOLUME` | `1.0` | playback attenuator (0.0–1.0). Also runtime-overridable from the dashboard via the volume slider |
+| `VOICE_OUTPUT_GAIN` | `24.0` | **v1/v3 only** (hosted Daily/Vapi bridge). Above-unity gain on speaker audio; clips on peaks. v2 ignores this knob |
+| `VOICE_INITIAL_OUTPUT_GAIN` | `2.6` | **v1/v3 only**. Extra opening-reply boost (clamped to be ≥ `VOICE_OUTPUT_GAIN`, so the default of 24 effectively disables the extra opening boost) |
+| `VOICE_INITIAL_OUTPUT_GAIN_DURATION_S` | `2.0` | **v1/v3 only**. How long the opening-reply boost stays active after bot audio starts |
 | `NOTIFICATIONS_ENABLED` | `0` | `1` to enable the notifications subsystem |
 | `NOTIFICATIONS_CONFIG` | `robot_stack/config/notifications.yaml` | alternate notifications config path |
 | `SLACK_WEBHOOK_ENABLED` | `0` | `1` to relay anomalies to Slack |

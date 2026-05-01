@@ -701,6 +701,20 @@ AWS_IOT_CA_PATH=/app/robot_stack/creds/amazon_root_ca.pem
 # CONVERSATION_LISTEN_EARLY_MARGIN_S=0
 # MAX_SESSION_DURATION_S=300
 
+# === Microphone preprocessing (ReSpeaker tuning) ===
+# Defaults are calibrated for the ReSpeaker 4 Mic Array using audio-tester:
+# raw stream sits ~12 dB below normal-speech target, quiet-room floor sits
+# around -70 dBFS. Override per-robot if your environment is different.
+# AUDIO_INPUT_GAIN_DB=12.0      # Digital gain applied after the gate. 0 = off.
+# AUDIO_NOISE_GATE_DB=-64.0     # RMS gate on raw signal in dBFS. "off" disables.
+
+# === Legacy hosted voice playback gain ===
+# VOICE_OUTPUT_VOLUME is an attenuator (0.0-1.0). Use gain to boost quiet
+# Daily/Vapi speaker audio above unity; clipping is applied if the signal peaks.
+# VOICE_OUTPUT_GAIN=24
+# VOICE_INITIAL_OUTPUT_GAIN=2.6
+# VOICE_INITIAL_OUTPUT_GAIN_DURATION_S=2.0
+
 # === Notifications ===
 # NOTIFICATIONS_ENABLED=0
 # NOTIFICATIONS_CONFIG=robot_stack/config/notifications.yaml
