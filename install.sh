@@ -733,6 +733,10 @@ AWS_IOT_CA_PATH=/app/robot_stack/creds/amazon_root_ca.pem
 # === Visualization ===
 # FOXGLOVE_URL=
 
+# === Semantic vision ===
+# SEMANTIC_CAMERA_MODE=panorama
+# SEMANTIC_CAMERA_SOURCE=/dev/video2
+
 # === Navigation stack integration ===
 # Temporary Docker socket path: omakase-robot operates the host Docker daemon
 # directly until this is replaced by an allowlisted host-side nav-control API.
