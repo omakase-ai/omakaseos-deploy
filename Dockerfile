@@ -127,7 +127,13 @@ ENV DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY} \
     VLM_MODEL=gemini-2.5-flash \
     CONVERSATION_VLM_MODEL=gemini-2.5-flash-lite
 
-ENV OMAKASE_API_URL=https://www.omakase.ai \
+# Runtime version reported in heartbeats / OTA reports / device-auth.
+# Populated from the git tag at CI build time (see build-image.yml). Falls
+# back to "unknown" for ad-hoc local builds. /etc/omakase/runtime.env on the
+# robot can still override this per-robot via compose's env_file directive.
+ARG OMAKASE_RUNTIME_VERSION=unknown
+ENV OMAKASE_RUNTIME_VERSION=${OMAKASE_RUNTIME_VERSION} \
+    OMAKASE_API_URL=https://www.omakase.ai \
     OMAKASE_IN_CONTAINER=1 \
     OMAKASE_SKIP_HOST_SETUP=1
 VOLUME ["/var/lib/omakase"]
