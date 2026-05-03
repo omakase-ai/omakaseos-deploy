@@ -1023,7 +1023,7 @@ CLOUD_ZONE=default
 
 # === Vision semantic API ===
 ROBOT_HOST=localhost
-ROBOT_STATUS_PORT=8080
+ROBOT_STATUS_PORT=8081
 SEMANTIC_TAG_WRITEBACK=false
 NAV_ENV
         chmod 644 "$target"
