@@ -243,7 +243,7 @@ gets seeded into `runtime.env` on first install.
 |---|---|---|
 | `OMAKASE_REGION` | prompted on first install | `us` / `jp` — skips the region prompt and selects `OMAKASE_API_URL` |
 | `OMAKASE_API_URL` | derived from `OMAKASE_REGION` | staging/local backend (overrides region selection) |
-| `OMAKASE_CONV_VERSION` | `v2` | pin to legacy v1 conversation engine |
+| `OMAKASE_CONV_VERSION` | `v3` | pin to v1/v2 conversation engines |
 | `OMAKASE_CONFIG_DIR` | `/etc/omakase` | non-default install layout |
 | `OMAKASE_WIFI_SETUP_DIR` | `/opt/omakase/wifi-setup` | non-default install layout |
 | `OMAKASE_BIN_DIR` | `/opt/omakase/bin` | non-default install layout |
@@ -263,7 +263,7 @@ out — uncomment and set what you need.
 | variable | default | when to set |
 |---|---|---|
 | `OMAKASE_API_URL` | `https://www.omakase.ai` | staging/local backend |
-| `OMAKASE_CONV_VERSION` | `v2` | `v1` to pin the legacy conversation engine |
+| `OMAKASE_CONV_VERSION` | `v3` | `v1` or `v2` to pin an older conversation engine |
 | `LOCALE` | `ja` | conversation locale (`ja` / `en` / …) |
 | `STATUS_SERVER_ENABLED` | `1` | `0` to disable the local status HTTP server |
 | `STATUS_PUSH_ENABLED` | `1` | `0` to stop pushing robot status to omakase.ai |

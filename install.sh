@@ -38,7 +38,7 @@
 # Environment overrides (rare):
 #   OMAKASE_REGION          (us | jp — selects OMAKASE_API_URL; skips the prompt)
 #   OMAKASE_API_URL         (overrides region selection; default derived from region)
-#   OMAKASE_CONV_VERSION    (v1 | v2, default v2)
+#   OMAKASE_CONV_VERSION    (v1 | v2 | v3, default v3)
 #   OMAKASE_CONFIG_DIR      (default: /etc/omakase)
 #   OMAKASE_WIFI_SETUP_DIR  (default: /opt/omakase/wifi-setup)
 #   OMAKASE_BIN_DIR         (default: /opt/omakase/bin)
@@ -61,7 +61,7 @@ set -euo pipefail
 # local-override path, which can't fire in pipe mode anyway.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || pwd)"
 MODE="install"
-CONV_VERSION="${OMAKASE_CONV_VERSION:-v2}"
+CONV_VERSION="${OMAKASE_CONV_VERSION:-v3}"
 # 1 if --version was passed on this invocation. Lets us decide whether
 # to overwrite OMAKASE_CONV_VERSION in an existing runtime.env, or defer
 # to the value already there.
@@ -122,12 +122,9 @@ while [ $# -gt 0 ]; do
 done
 
 case "$CONV_VERSION" in
-    v1|v2) ;;
-    v3)
-        echo "ERROR: conversation engine v3 is not implemented yet." >&2
-        exit 2;;
+    v1|v2|v3) ;;
     *)
-        echo "ERROR: --version expects v1 or v2 (got '$CONV_VERSION')." >&2
+        echo "ERROR: --version expects v1, v2, or v3 (got '$CONV_VERSION')." >&2
         exit 2;;
 esac
 
@@ -301,10 +298,10 @@ fi
 
 # If --version wasn't passed on this invocation, defer to whatever the
 # existing runtime.env had — otherwise the completion banner can lie
-# (claiming v2 while the file still pins v1, or vice versa).
+# (claiming v3 while the file still pins v1/v2, or vice versa).
 if [ "$EXPLICIT_CONV_VERSION" = "0" ] && [ -n "${OMAKASE_CONV_VERSION:-}" ]; then
     case "$OMAKASE_CONV_VERSION" in
-        v1|v2) CONV_VERSION="$OMAKASE_CONV_VERSION" ;;
+        v1|v2|v3) CONV_VERSION="$OMAKASE_CONV_VERSION" ;;
         *) ;; # malformed runtime.env — fall through with the default
     esac
 fi
@@ -1002,6 +999,9 @@ MAPPING_LINE_RESOLUTION=0.02
 MAPPING_PLANE_RESOLUTION=0.02
 VOXEL_RESOLUTION=0.05
 
+# Directory inside nav_autonomy containing traverse_poses.txt
+MAP_PATH=/ros2_ws/maps/current_best_map
+
 # === Goal tolerance ===
 GOAL_REACHED_THRESHOLD=0.3
 GOAL_YAW_THRESHOLD=0.15
@@ -1027,6 +1027,17 @@ ROBOT_STATUS_PORT=8081
 SEMANTIC_TAG_WRITEBACK=false
 NAV_ENV
         chmod 644 "$target"
+    }
+
+    write_nav_stack_key_file() {
+        local target="$1"
+        cat >"$target" <<'KEY_ENV'
+# Omakase Cloud API credentials
+# This file is gitignored — do not commit
+CLOUD_API_KEY=
+CLOUD_ROBOT_ID=robot-01
+KEY_ENV
+        chmod 600 "$target"
     }
 
     nav_ready=0
@@ -1062,6 +1073,13 @@ NAV_ENV
         else
             echo "Seeding $NAV_STACK_DIR/.env from $OMAKASE_ROBOT_VENDOR/$OMAKASE_ROBOT_MODEL..."
             write_nav_stack_env "$OMAKASE_ROBOT_VENDOR" "$OMAKASE_ROBOT_MODEL" "$NAV_STACK_DIR/.env"
+        fi
+
+        if [ -f "$NAV_STACK_DIR/key.txt" ]; then
+            echo "Preserved existing $NAV_STACK_DIR/key.txt."
+        else
+            echo "Seeding $NAV_STACK_DIR/key.txt."
+            write_nav_stack_key_file "$NAV_STACK_DIR/key.txt"
         fi
 
         if [ -f "$NAV_STACK_DIR/docker-compose.yml" ]; then
