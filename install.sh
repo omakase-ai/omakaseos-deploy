@@ -331,7 +331,7 @@ upsert_runtime_env() {
 append_runtime_env_default_if_missing() {
     local key="$1" value="$2"
     if ! grep -Eq "^[[:space:]]*$key=" "$RUNTIME_ENV_FILE"; then
-        printf '%s=%s\n' "$key" "$value" >>"$RUNTIME_ENV_FILE"
+        upsert_runtime_env "$key" "$value"
     fi
 }
 
@@ -739,6 +739,7 @@ AWS_IOT_CA_PATH=/app/robot_stack/creds/amazon_root_ca.pem
 # directly until this is replaced by an allowlisted host-side nav-control API.
 NAV_DEPLOY_DIR=/nav-autonomy-deploy
 MAPS_DIR=/nav-autonomy-deploy/maps
+NAV_AUTONOMY_DOCKER_CONTAINER=nav_autonomy
 # Leave unset while using Docker socket fallback. Future host-control mode:
 # OMAKASE_NAV_CONTROL_URL=http://127.0.0.1:9082
 # OMAKASE_NAV_CONTROL_TOKEN=
@@ -761,6 +762,7 @@ RUNTIME
     echo "Seeded $RUNTIME_ENV_FILE — edit it to add provider API keys and feature flags."
 else
     append_runtime_env_default_if_missing STATUS_PUSH_ENABLED 1
+    append_runtime_env_default_if_missing NAV_AUTONOMY_DOCKER_CONTAINER nav_autonomy
     if [ "$EXPLICIT_CONV_VERSION" = "1" ]; then
         upsert_runtime_env OMAKASE_CONV_VERSION "$CONV_VERSION"
         echo "Updated OMAKASE_CONV_VERSION in $RUNTIME_ENV_FILE → $CONV_VERSION."

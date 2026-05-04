@@ -298,6 +298,7 @@ out — uncomment and set what you need.
 | `FOXGLOVE_URL` | unset | Foxglove visualization URL |
 | `NAV_DEPLOY_DIR` | `/nav-autonomy-deploy` | container-side path for the mounted `nav-autonomy-deploy` checkout |
 | `MAPS_DIR` | `/nav-autonomy-deploy/maps` | container-side path for nav map listing and current-best-map sync |
+| `NAV_AUTONOMY_DOCKER_CONTAINER` | `nav_autonomy` | override only if the deployed nav-autonomy compose file uses a different `container_name` |
 | `OMAKASE_NAV_CONTROL_URL` | unset | future host nav-control API; leave unset while using the temporary Docker socket fallback |
 | `PATROL_RECORDING_DIR` | `recordings/patrol_video` | container-side patrol video output |
 | `PATROL_RECORDING_SEGMENT_SECONDS` | `300` | patrol video segment length |
@@ -327,15 +328,18 @@ For new installs, `runtime.env` is seeded with:
 ```env
 NAV_DEPLOY_DIR=/nav-autonomy-deploy
 MAPS_DIR=/nav-autonomy-deploy/maps
+NAV_AUTONOMY_DOCKER_CONTAINER=nav_autonomy
 ```
 
 For existing robots, `runtime.env` is operator-managed and is not overwritten
-on `--upgrade`, so add the missing lines manually and restart:
+on `--upgrade`. Recent installers add the nav container default when it is
+missing; to patch it manually, add the missing lines and restart:
 
 ```bash
 sudo tee -a /etc/omakase/runtime.env >/dev/null <<'EOF'
 NAV_DEPLOY_DIR=/nav-autonomy-deploy
 MAPS_DIR=/nav-autonomy-deploy/maps
+NAV_AUTONOMY_DOCKER_CONTAINER=nav_autonomy
 EOF
 sudo systemctl restart omakase-robot.service
 ```
