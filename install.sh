@@ -733,6 +733,11 @@ AWS_IOT_CA_PATH=/app/robot_stack/creds/amazon_root_ca.pem
 # === Semantic vision ===
 # SEMANTIC_CAMERA_MODE=panorama
 # SEMANTIC_CAMERA_SOURCE=/dev/video2
+# Webcam mode (SEMANTIC_CAMERA_MODE=webcam) reads frames from the shared-
+# memory channel that the MediaPipe vision loop publishes — V4L2 only
+# allows one reader per device, so we never open the webcam twice. Set
+# SEMANTIC_CAMERA_SOURCE to a /dev path or integer index only when running
+# the semantic API standalone with no MediaPipe process to share frames.
 
 # === Navigation stack integration ===
 # Temporary Docker socket path: omakase-robot operates the host Docker daemon
