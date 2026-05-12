@@ -280,6 +280,8 @@ out — uncomment and set what you need.
 | `MAX_SESSION_DURATION_S` | `300` | cap a single conversation session in seconds |
 | `AUDIO_INPUT_GAIN_DB` | `12.0` (v2) / `0.0` (v1/v3) | digital gain (dB) on captured mic frames after the noise gate. v2 default tuned for the ReSpeaker 4 Mic Array; raise/lower per environment |
 | `AUDIO_NOISE_GATE_DB` | `-64.0` (v2) / off (v1/v3) | RMS gate threshold (dBFS) on raw mic frames; quieter frames are zeroed so steady fan/handling noise can't trigger VAD or be amplified. Set to `off` to disable |
+| `OMAKASE_VOICE_INPUT_DEVICE` | unset | **v1/v3 only**. Pin the hosted conversation microphone by PortAudio index or device-name substring; overrides the ReSpeaker profile default |
+| `OMAKASE_VOICE_OUTPUT_DEVICE` | unset | **v1/v3 only**. Pin the hosted conversation speaker by PortAudio index or device-name substring; overrides the ReSpeaker profile default |
 | `VOICE_OUTPUT_VOLUME` | `1.0` | playback attenuator (0.0–1.0). Also runtime-overridable from the dashboard via the volume slider |
 | `VOICE_OUTPUT_GAIN` | `24.0` | **v1/v3 only** (hosted Daily/Vapi bridge). Above-unity gain on speaker audio; clips on peaks. v2 ignores this knob |
 | `VOICE_INITIAL_OUTPUT_GAIN` | `2.6` | **v1/v3 only**. Extra opening-reply boost (clamped to be ≥ `VOICE_OUTPUT_GAIN`, so the default of 24 effectively disables the extra opening boost) |
@@ -296,8 +298,9 @@ out — uncomment and set what you need.
 | `ANOMALY_ENABLED` | `0` | `1` to turn on the anomaly engine |
 | `ANOMALY_PRESET` | unset | named preset, e.g. `hospital_patrol` |
 | `FOXGLOVE_URL` | unset | Foxglove visualization URL |
-| `NAV_DEPLOY_DIR` | `/nav-autonomy-deploy` | container-side path for the mounted `nav-autonomy-deploy` checkout |
-| `MAPS_DIR` | `/nav-autonomy-deploy/maps` | container-side path for nav map listing and current-best-map sync |
+| `NAV_STACK_DIR` | `/opt/omakase/nav-autonomy-deploy` | host-visible path for the `nav-autonomy-deploy` checkout |
+| `NAV_DEPLOY_DIR` | unset | legacy override for the nav checkout path; defaults to `NAV_STACK_DIR` |
+| `MAPS_DIR` | unset | optional maps path override; defaults to `NAV_STACK_DIR/maps` |
 | `NAV_AUTONOMY_DOCKER_CONTAINER` | `nav_autonomy` | override only if the deployed nav-autonomy compose file uses a different `container_name` |
 | `OMAKASE_NAV_CONTROL_URL` | unset | future host nav-control API; leave unset while using the temporary Docker socket fallback |
 | `PATROL_RECORDING_DIR` | `recordings/patrol_video` | container-side patrol video output |
@@ -311,6 +314,7 @@ out — uncomment and set what you need.
 The runtime compose currently bind-mounts:
 
 ```yaml
+- /opt/omakase/nav-autonomy-deploy:/opt/omakase/nav-autonomy-deploy:rw
 - /opt/omakase/nav-autonomy-deploy:/nav-autonomy-deploy:rw
 - /var/run/docker.sock:/var/run/docker.sock
 ```
@@ -326,19 +330,19 @@ the existing allowlisted nav scripts from inside `omakase-robot`:
 For new installs, `runtime.env` is seeded with:
 
 ```env
-NAV_DEPLOY_DIR=/nav-autonomy-deploy
-MAPS_DIR=/nav-autonomy-deploy/maps
+NAV_STACK_DIR=/opt/omakase/nav-autonomy-deploy
 NAV_AUTONOMY_DOCKER_CONTAINER=nav_autonomy
 ```
 
 For existing robots, `runtime.env` is operator-managed and is not overwritten
-on `--upgrade`. Recent installers add the nav container default when it is
-missing; to patch it manually, add the missing lines and restart:
+on `--upgrade`. Recent installers add `NAV_STACK_DIR` when missing. Runtime
+code treats the old `/nav-autonomy-deploy` defaults as stale when
+`NAV_STACK_DIR` is present, but still honors custom `NAV_DEPLOY_DIR` or
+`MAPS_DIR` overrides; to patch it manually, add the missing lines and restart:
 
 ```bash
 sudo tee -a /etc/omakase/runtime.env >/dev/null <<'EOF'
-NAV_DEPLOY_DIR=/nav-autonomy-deploy
-MAPS_DIR=/nav-autonomy-deploy/maps
+NAV_STACK_DIR=/opt/omakase/nav-autonomy-deploy
 NAV_AUTONOMY_DOCKER_CONTAINER=nav_autonomy
 EOF
 sudo systemctl restart omakase-robot.service

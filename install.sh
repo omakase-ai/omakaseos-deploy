@@ -705,6 +705,12 @@ AWS_IOT_CA_PATH=/app/robot_stack/creds/amazon_root_ca.pem
 # AUDIO_INPUT_GAIN_DB=12.0      # Digital gain applied after the gate. 0 = off.
 # AUDIO_NOISE_GATE_DB=-64.0     # RMS gate on raw signal in dBFS. "off" disables.
 
+# === Hosted conversation audio device pinning ===
+# PortAudio index or device name substring. When set, these override the
+# ReSpeaker profile defaults for the hosted voice worker.
+# OMAKASE_VOICE_INPUT_DEVICE=
+# OMAKASE_VOICE_OUTPUT_DEVICE=
+
 # === Legacy hosted voice playback gain ===
 # VOICE_OUTPUT_VOLUME is an attenuator (0.0-1.0). Use gain to boost quiet
 # Daily/Vapi speaker audio above unity; clipping is applied if the signal peaks.
@@ -742,10 +748,11 @@ AWS_IOT_CA_PATH=/app/robot_stack/creds/amazon_root_ca.pem
 # === Navigation stack integration ===
 # Temporary Docker socket path: omakase-robot operates the host Docker daemon
 # directly until this is replaced by an allowlisted host-side nav-control API.
-NAV_DEPLOY_DIR=/nav-autonomy-deploy
-MAPS_DIR=/nav-autonomy-deploy/maps
+NAV_STACK_DIR=$NAV_STACK_DIR
 NAV_AUTONOMY_DOCKER_CONTAINER=nav_autonomy
 # Leave unset while using Docker socket fallback. Future host-control mode:
+# NAV_DEPLOY_DIR=        # legacy override; defaults to NAV_STACK_DIR.
+# MAPS_DIR=              # optional override; defaults to NAV_STACK_DIR/maps.
 # OMAKASE_NAV_CONTROL_URL=http://127.0.0.1:9082
 # OMAKASE_NAV_CONTROL_TOKEN=
 
@@ -767,6 +774,16 @@ RUNTIME
     echo "Seeded $RUNTIME_ENV_FILE — edit it to add provider API keys and feature flags."
 else
     append_runtime_env_default_if_missing STATUS_PUSH_ENABLED 1
+    if ! grep -Eq "^[[:space:]]*NAV_STACK_DIR=" "$RUNTIME_ENV_FILE"; then
+        if [ -n "${NAV_DEPLOY_DIR:-}" ] && [ "${NAV_DEPLOY_DIR:-}" != "/nav-autonomy-deploy" ]; then
+            upsert_runtime_env NAV_STACK_DIR "$NAV_DEPLOY_DIR"
+            NAV_STACK_DIR="$NAV_DEPLOY_DIR"
+            echo "Migrated NAV_DEPLOY_DIR in $RUNTIME_ENV_FILE → NAV_STACK_DIR=$NAV_DEPLOY_DIR."
+        else
+            upsert_runtime_env NAV_STACK_DIR "$NAV_STACK_DIR"
+            echo "Added NAV_STACK_DIR to $RUNTIME_ENV_FILE → $NAV_STACK_DIR."
+        fi
+    fi
     append_runtime_env_default_if_missing NAV_AUTONOMY_DOCKER_CONTAINER nav_autonomy
     if [ "$EXPLICIT_CONV_VERSION" = "1" ]; then
         upsert_runtime_env OMAKASE_CONV_VERSION "$CONV_VERSION"
@@ -818,6 +835,11 @@ services:
       - /etc/omakase/license.json:/var/lib/omakase/license.json:ro
       # Temporary nav-autonomy bridge: use host Docker directly until the
       # allowlisted host-side nav-control service replaces Docker socket access.
+      # Keep the primary path identical inside the container and on the host so
+      # docker compose bind mount sources resolve correctly through docker.sock.
+      - /opt/omakase/nav-autonomy-deploy:/opt/omakase/nav-autonomy-deploy:rw
+      # Compatibility mount for older operator configs that still reference the
+      # previous container-side path.
       - /opt/omakase/nav-autonomy-deploy:/nav-autonomy-deploy:rw
       - /var/run/docker.sock:/var/run/docker.sock
       - ${XDG_RUNTIME_DIR:-/run/user/${OMAKASE_RUNTIME_UID:-1000}}/pulse:/run/pulse:ro
