@@ -298,6 +298,7 @@ out — uncomment and set what you need.
 | `ANOMALY_ENABLED` | `0` | `1` to turn on the anomaly engine |
 | `ANOMALY_PRESET` | unset | named preset, e.g. `hospital_patrol` |
 | `FOXGLOVE_URL` | unset | Foxglove visualization URL |
+| `SEMANTIC_API_ENABLED` | `true` | `false` to hide the `/api/vision/semantic` API and avoid loading the semantic detector |
 | `NAV_STACK_DIR` | `/opt/omakase/nav-autonomy-deploy` | host-visible path for the `nav-autonomy-deploy` checkout |
 | `NAV_DEPLOY_DIR` | unset | legacy override for the nav checkout path; defaults to `NAV_STACK_DIR` |
 | `MAPS_DIR` | unset | optional maps path override; defaults to `NAV_STACK_DIR/maps` |
