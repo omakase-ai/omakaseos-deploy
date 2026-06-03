@@ -59,6 +59,67 @@ If you're a contributor adding a new env var to `robot_stack/`, also add a
 **commented** placeholder to the `runtime.env` template inside
 `distribution/install.sh` so first-install operators see the knob exists.
 
+### Data collection
+
+Training / analysis capture is disabled by default. To record local camera and
+audio sessions for later manual S3 upload, add the data-collection knobs to
+`/etc/omakase/runtime.env` and restart the robot service:
+
+```bash
+DATA_COLLECTION_ENABLED=1
+DATA_COLLECTION_DIR=recordings/datasets
+DATA_COLLECTION_FPS=15
+DATA_COLLECTION_SEGMENT_SECONDS=0
+DATA_COLLECTION_RECORD_PRIMARY=1
+DATA_COLLECTION_RECORD_REALSENSE=1
+DATA_COLLECTION_DETAILED_TIMING=0
+DATA_COLLECTION_AUDIO_ENABLED=1
+DATA_COLLECTION_AUDIO_DEVICE=
+DATA_COLLECTION_AUDIO_SAMPLE_RATE=16000
+DATA_COLLECTION_AUDIO_CHANNELS=1
+DATA_COLLECTION_AUDIO_CHUNK_MS=100
+DATA_COLLECTION_AUDIO_INPUT_CHANNEL=0
+DATA_COLLECTION_AUDIO_INPUT_GAIN_DB=0
+DATA_COLLECTION_AUDIO_NOISE_GATE_DB=off
+DATA_COLLECTION_INTENT_FPS=5
+DATA_COLLECTION_SEMANTIC_FPS=0
+DATA_COLLECTION_S3_BUCKET=omakase-robot-visuals-prod
+DATA_COLLECTION_S3_PREFIX=datasets
+DATA_COLLECTION_S3_AUTH=auto
+```
+
+Sessions stay on local disk until an operator pushes them manually.
+By default each session writes one continuous `video.mp4` per camera stream and
+continuous `raw.wav` / `processed_mono.wav` audio for the whole runtime, with
+stream start/end and counts summarized in `manifest.json`.
+Set `DATA_COLLECTION_SEGMENT_SECONDS` to a positive number only when fixed-size
+video chunks are operationally useful.
+Set `DATA_COLLECTION_DETAILED_TIMING=1` only when per-frame/per-audio-chunk
+JSONL timing indexes are needed for debugging or drift analysis.
+The Robot Monitor exposes Data Collection controls on port 8081; Enable/Disable
+updates a runtime state file that `main.py` polls, so capture can be toggled
+without restarting the service.
+
+Manual upload uses an S3 prefix as the dataset "folder". For example, with the
+production `omakase-robot-visuals-prod` bucket:
+
+```bash
+uv run python -m robot_stack.scripts.push_data_collection \
+  recordings/datasets/<session_id> \
+  --bucket omakase-robot-visuals-prod \
+  --prefix datasets
+```
+
+On deployed robots the uploader can use the existing AWS IoT certificate flow.
+That role is write-only: uploads require `s3:PutObject` for the dataset prefix
+but do not require `s3:GetObject`, `HeadObject`, or `ListBucket`. On a
+workstation, pass `--auth default` (and optionally `--profile <name>`) to use
+normal boto3/AWS CLI credentials instead.
+The Monitor's "Upload all pending" button uploads every completed local session
+that does not have a local `.data_collection_upload.json` marker, newest first.
+It does not check S3 for existing objects; deleting the local marker can cause a
+session to be uploaded again.
+
 The runtime container itself is pulled from a private AWS ECR repository
 (`omakaseos`). The robot never holds AWS credentials — the backend mints a
 12-hour ECR auth token in exchange for the bootstrap token, on every install
@@ -243,7 +304,7 @@ gets seeded into `runtime.env` on first install.
 |---|---|---|
 | `OMAKASE_REGION` | prompted on first install | `us` / `jp` — skips the region prompt and selects `OMAKASE_API_URL` |
 | `OMAKASE_API_URL` | derived from `OMAKASE_REGION` | staging/local backend (overrides region selection) |
-| `OMAKASE_CONV_VERSION` | `v3` | pin to v1/v2 conversation engines |
+| `OMAKASE_CONV_VERSION` | `v3` | pin to a specific conversation engine (`v1`/`v2`/`v4`) |
 | `OMAKASE_CONFIG_DIR` | `/etc/omakase` | non-default install layout |
 | `OMAKASE_WIFI_SETUP_DIR` | `/opt/omakase/wifi-setup` | non-default install layout |
 | `OMAKASE_BIN_DIR` | `/opt/omakase/bin` | non-default install layout |
@@ -263,7 +324,7 @@ out — uncomment and set what you need.
 | variable | default | when to set |
 |---|---|---|
 | `OMAKASE_API_URL` | `https://www.omakase.ai` | staging/local backend |
-| `OMAKASE_CONV_VERSION` | `v3` | `v1` or `v2` to pin an older conversation engine |
+| `OMAKASE_CONV_VERSION` | `v3` | `v1`, `v2`, or `v4` to select a different conversation engine |
 | `LOCALE` | `ja` | conversation locale (`ja` / `en` / …) |
 | `STATUS_SERVER_ENABLED` | `1` | `0` to disable the local status HTTP server |
 | `STATUS_PUSH_ENABLED` | `1` | `0` to stop pushing robot status to omakase.ai |
@@ -295,7 +356,7 @@ out — uncomment and set what you need.
 | `CLIENT_NOTIFICATION_WEBHOOK_URL` | unset | customer-side webhook endpoint |
 | `CLIENT_NOTIFICATION_WEBHOOK_TOKEN` | unset | bearer token sent with the customer webhook |
 | `CLIENT_NOTIFICATION_INCLUDE_IMAGE` | `1` | `0` to omit the trigger image |
-| `ANOMALY_ENABLED` | `0` | `1` to turn on the anomaly engine |
+| `ANOMALY_ENABLED` | `0` | `1` to enable anomaly when invoking `robot_stack.main` directly; has no effect via `start.sh`, which unconditionally passes `--enable-anomaly` |
 | `ANOMALY_PRESET` | unset | named preset, e.g. `hospital_patrol` |
 | `FOXGLOVE_URL` | unset | Foxglove visualization URL |
 | `SEMANTIC_API_ENABLED` | `true` | `false` to hide the `/api/vision/semantic` API and avoid loading the semantic detector |
