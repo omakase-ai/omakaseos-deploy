@@ -38,7 +38,7 @@
 # Environment overrides (rare):
 #   OMAKASE_REGION          (us | jp — selects OMAKASE_API_URL; skips the prompt)
 #   OMAKASE_API_URL         (overrides region selection; default derived from region)
-#   OMAKASE_CONV_VERSION    (v1 | v2 | v3, default v3)
+#   OMAKASE_CONV_VERSION    (v1 | v2 | v3 | v4, default v4)
 #   OMAKASE_CONFIG_DIR      (default: /etc/omakase)
 #   OMAKASE_WIFI_SETUP_DIR  (default: /opt/omakase/wifi-setup)
 #   OMAKASE_BIN_DIR         (default: /opt/omakase/bin)
@@ -47,6 +47,10 @@
 #                           (the user that ran `sudo ./install.sh`), falling
 #                           back to 1000. Override if the robot's audio user
 #                           is neither the sudo invoker nor UID 1000.
+#   OMAKASE_PULSE_COOKIE_PATH
+#                           Host PulseAudio cookie to mount into the runtime
+#                           container. Defaults to the runtime user's
+#                           ~/.config/pulse/cookie when present.
 #   OMAKASE_SKIP_NAV_STACK  Set to 1 to skip cloning + starting
 #                           nav-autonomy-deploy (workstation/dev hosts that
 #                           don't run the navigation autonomy stack).
@@ -61,7 +65,7 @@ set -euo pipefail
 # local-override path, which can't fire in pipe mode anyway.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || pwd)"
 MODE="install"
-CONV_VERSION="${OMAKASE_CONV_VERSION:-v3}"
+CONV_VERSION="${OMAKASE_CONV_VERSION:-v4}"
 # 1 if --version was passed on this invocation. Lets us decide whether
 # to overwrite OMAKASE_CONV_VERSION in an existing runtime.env, or defer
 # to the value already there.
@@ -87,6 +91,9 @@ EXPLICIT_API_URL=0
 REGION="${OMAKASE_REGION:-}"
 
 OMAKASE_RUNTIME_UID="${OMAKASE_RUNTIME_UID:-${SUDO_UID:-1000}}"
+OMAKASE_RUNTIME_HOME="${OMAKASE_RUNTIME_HOME:-$(getent passwd "$OMAKASE_RUNTIME_UID" | awk -F: '{print $6; exit}' 2>/dev/null || true)}"
+OMAKASE_PULSE_RUNTIME_DIR="/run/user/$OMAKASE_RUNTIME_UID/pulse"
+PULSE_CHECK_SCRIPT="$OMAKASE_BIN_DIR/omakase-check-pulse-runtime.sh"
 
 LICENSE_FILE="$OMAKASE_CONFIG_DIR/license.json"
 ENV_FILE="$OMAKASE_CONFIG_DIR/robot.env"
@@ -122,9 +129,9 @@ while [ $# -gt 0 ]; do
 done
 
 case "$CONV_VERSION" in
-    v1|v2|v3) ;;
+    v1|v2|v3|v4) ;;
     *)
-        echo "ERROR: --version expects v1, v2, or v3 (got '$CONV_VERSION')." >&2
+        echo "ERROR: --version expects v1, v2, v3, or v4 (got '$CONV_VERSION')." >&2
         exit 2;;
 esac
 
@@ -301,7 +308,7 @@ fi
 # (claiming v3 while the file still pins v1/v2, or vice versa).
 if [ "$EXPLICIT_CONV_VERSION" = "0" ] && [ -n "${OMAKASE_CONV_VERSION:-}" ]; then
     case "$OMAKASE_CONV_VERSION" in
-        v1|v2|v3) CONV_VERSION="$OMAKASE_CONV_VERSION" ;;
+        v1|v2|v3|v4) CONV_VERSION="$OMAKASE_CONV_VERSION" ;;
         *) ;; # malformed runtime.env — fall through with the default
     esac
 fi
@@ -544,6 +551,47 @@ if [ -f "$SCRIPT_DIR/ota.sh" ]; then
     echo "Using local ota.sh from $SCRIPT_DIR (override)."
 fi
 
+cat >"$PULSE_CHECK_SCRIPT" <<'PULSE_CHECK'
+#!/usr/bin/env bash
+set -euo pipefail
+
+uid="${1:?runtime UID required}"
+runtime_dir="/run/user/$uid"
+pulse_dir="$runtime_dir/pulse"
+pulse_socket="$pulse_dir/native"
+
+# Start the runtime user's user manager before Docker evaluates bind mounts.
+# Without this guard, Docker/compose may create /run/user/$uid or pulse as root.
+systemctl start "user@$uid.service" >/dev/null 2>&1 || true
+
+for _ in {1..20}; do
+    if [ -d "$runtime_dir" ]; then
+        owner="$(stat -c %u "$runtime_dir" 2>/dev/null || true)"
+        if [ "$owner" = "$uid" ]; then
+            break
+        fi
+    fi
+    sleep 0.5
+done
+
+owner="$(stat -c %u "$runtime_dir" 2>/dev/null || true)"
+if [ ! -d "$runtime_dir" ] || [ "$owner" != "$uid" ]; then
+    echo "ERROR: $runtime_dir must exist and be owned by UID $uid before starting omakase." >&2
+    echo "       Refusing to run Docker compose because it can create missing bind sources as root." >&2
+    exit 1
+fi
+
+for _ in {1..20}; do
+    [ -S "$pulse_socket" ] && exit 0
+    sleep 0.5
+done
+
+echo "ERROR: PulseAudio socket is missing: $pulse_socket" >&2
+echo "       Start the runtime user's pipewire-pulse/pulseaudio service, then restart omakase-robot.service." >&2
+exit 1
+PULSE_CHECK
+chmod 755 "$PULSE_CHECK_SCRIPT"
+
 # ---------------------------------------------------------------------------
 # WiFi-setup venv (host-level, readable Python). Recreate only if missing or
 # if requirements.txt changed since the last install.
@@ -632,6 +680,22 @@ omakase_ecr_login "$REQUESTED_TAG"
 # Adding a new env var that the runtime reads? Just add it to runtime.env on
 # the box. There is no compose-template list to keep in sync.
 # ---------------------------------------------------------------------------
+"$PULSE_CHECK_SCRIPT" "$OMAKASE_RUNTIME_UID"
+
+if [ -z "${OMAKASE_PULSE_COOKIE_PATH:-}" ]; then
+    if [ -n "$OMAKASE_RUNTIME_HOME" ] && [ -f "$OMAKASE_RUNTIME_HOME/.config/pulse/cookie" ]; then
+        OMAKASE_PULSE_COOKIE_PATH="$OMAKASE_RUNTIME_HOME/.config/pulse/cookie"
+    else
+        echo "ERROR: PulseAudio cookie not found for runtime UID $OMAKASE_RUNTIME_UID." >&2
+        echo "       Expected: ${OMAKASE_RUNTIME_HOME:-<unknown-home>}/.config/pulse/cookie" >&2
+        echo "       Set OMAKASE_PULSE_COOKIE_PATH to the host Pulse cookie and re-run install.sh --upgrade." >&2
+        exit 1
+    fi
+elif [ ! -f "$OMAKASE_PULSE_COOKIE_PATH" ]; then
+    echo "ERROR: OMAKASE_PULSE_COOKIE_PATH is set but missing or not a file: $OMAKASE_PULSE_COOKIE_PATH" >&2
+    exit 1
+fi
+
 cat >"$ENV_FILE" <<ENV
 # /etc/omakase/robot.env — install metadata. DO NOT EDIT.
 # Overwritten on every install / upgrade / OTA. Operator-tunable knobs live
@@ -639,6 +703,8 @@ cat >"$ENV_FILE" <<ENV
 OMAKASE_IMAGE_REF=$OMAKASE_IMAGE_REF
 OMAKASE_IMAGE_TAG=$OMAKASE_ECR_TAG
 OMAKASE_RUNTIME_UID=$OMAKASE_RUNTIME_UID
+OMAKASE_PULSE_RUNTIME_DIR=$OMAKASE_PULSE_RUNTIME_DIR
+OMAKASE_PULSE_COOKIE_PATH=$OMAKASE_PULSE_COOKIE_PATH
 ENV
 chmod 600 "$ENV_FILE"
 
@@ -697,6 +763,42 @@ AWS_IOT_CA_PATH=/app/robot_stack/creds/amazon_root_ca.pem
 # CONVERSATION_VLM_MODEL=gemini-2.5-flash-lite
 # CONVERSATION_LISTEN_EARLY_MARGIN_S=0
 # MAX_SESSION_DURATION_S=300
+
+# === Conversation engine (v4 + local LLM / Gemma E4B) ===
+# These point at the omakase-operated local-llm/Gemma host on the robot LAN.
+# Set OMAKASE_CONV_VERSION=v4 above (or install with --version v4) to use v4.
+CONVERSATION_MLLM_PROVIDER=gemma_e4b
+GEMMA_E4B_BASE_URL=http://100.80.27.115:8004/v1
+GEMMA_E4B_MODEL=gemma-e4b
+GEMMA_E4B_TIMEOUT_S=60
+PROMPT_VARIANT=humanoid_summit
+
+# TTS overrides (irodori / SBV2)
+CONVERSATION_TTS_OVERRIDE_JA=irodori:masa
+CONVERSATION_TTS_OVERRIDE_EN_US=sbv2:masa_english
+TTS_BASE_URL=http://100.80.27.115:8890/v1
+
+# local-llm orchestrator (:8088) — v2 STT/LLM/TTS; v4 MLLM uses GEMMA_E4B_BASE_URL
+LOCAL_LLM_BASE_URL=http://100.80.27.115:8088
+LOCAL_LLM_TTS_BASE_URL=http://100.80.27.115:8088
+LOCAL_LLM_TTS_TIMEOUT_S=300
+
+# STT: Voxtral via local-llm
+STT_PROVIDER=voxtral
+VOXTRAL_STT_BASE_URL=http://100.80.27.115:8088
+VOXTRAL_STT_TIMEOUT_S=300
+
+# LLM fallback path (v2 / tooling)
+CONVERSATION_LLM_PROVIDER=qwen
+DASHSCOPE_BASE_URL=http://100.80.27.115:8088/v1
+DASHSCOPE_API_KEY=local
+QWEN_MODEL=qwen3-vl-flash
+CONVERSATION_LLM_HISTORY_MESSAGES=6
+
+# Session timing
+CONVERSATION_LISTEN_EARLY_MARGIN_S=0
+MAX_SESSION_DURATION_S=300
+CONVERSATION_V2_PRESENCE_LOSS_TIMEOUT_S=30
 
 # === Business card hand / suction cup ===
 # BUSINESS_CARD_CATCH_MOTION=business_card_catch_v5
@@ -869,6 +971,7 @@ services:
     environment:
       - OMAKASE_IN_CONTAINER=1
       - OMAKASE_SKIP_HOST_SETUP=1
+      - PULSE_SERVER=unix:/run/pulse/native
     volumes:
       - /etc/omakase/license.json:/var/lib/omakase/license.json:ro
       # Temporary nav-autonomy bridge: use host Docker directly until the
@@ -880,7 +983,18 @@ services:
       # previous container-side path.
       - /opt/omakase/nav-autonomy-deploy:/nav-autonomy-deploy:rw
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${XDG_RUNTIME_DIR:-/run/user/${OMAKASE_RUNTIME_UID:-1000}}/pulse:/run/pulse:ro
+      - type: bind
+        source: ${OMAKASE_PULSE_RUNTIME_DIR}
+        target: /run/pulse
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${OMAKASE_PULSE_COOKIE_PATH}
+        target: /root/.config/pulse/cookie
+        read_only: true
+        bind:
+          create_host_path: false
       - omakase-data:/var/lib/omakase
       - omakase-logs:/var/log/omakase
 
@@ -904,6 +1018,7 @@ Requires=docker.service
 Type=oneshot
 RemainAfterExit=yes
 EnvironmentFile=$ENV_FILE
+ExecStartPre=$PULSE_CHECK_SCRIPT $OMAKASE_RUNTIME_UID
 ExecStart=/usr/bin/docker compose --env-file $ENV_FILE -f $COMPOSE_FILE up -d --remove-orphans
 ExecStop=/usr/bin/docker compose --env-file $ENV_FILE -f $COMPOSE_FILE down
 TimeoutStartSec=600

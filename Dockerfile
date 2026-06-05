@@ -26,7 +26,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       git \
       gnupg \
       libasound2-dev \
+      libasound2-plugins \
       portaudio19-dev \
+      pulseaudio-utils \
+      alsa-utils \
       libegl1 \
       libgl1 \
       libgles2 \
@@ -38,6 +41,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libssl-dev \
       pkg-config \
     && rm -rf /var/lib/apt/lists/*
+
+# Make ALSA's "default" PCM route through PulseAudio inside the container when
+# the plugin package provides the opt-in example config. This keeps PortAudio's
+# default/pulse devices available after container recreation.
+RUN if [ -e /etc/alsa/conf.d/99-pulseaudio-default.conf.example ]; then \
+      ln -sf /etc/alsa/conf.d/99-pulseaudio-default.conf.example \
+             /etc/alsa/conf.d/99-pulseaudio-default.conf; \
+    fi \
+    && install -d -m 700 /root/.config/pulse
 
 # Temporary nav-autonomy integration: the runtime container can operate the
 # host's Docker daemon via a mounted /var/run/docker.sock until the smaller

@@ -304,7 +304,7 @@ gets seeded into `runtime.env` on first install.
 |---|---|---|
 | `OMAKASE_REGION` | prompted on first install | `us` / `jp` — skips the region prompt and selects `OMAKASE_API_URL` |
 | `OMAKASE_API_URL` | derived from `OMAKASE_REGION` | staging/local backend (overrides region selection) |
-| `OMAKASE_CONV_VERSION` | `v3` | pin to a specific conversation engine (`v1`/`v2`/`v4`) |
+| `OMAKASE_CONV_VERSION` | `v4` | pin to a specific conversation engine (`v1`/`v2`/`v3`) |
 | `OMAKASE_CONFIG_DIR` | `/etc/omakase` | non-default install layout |
 | `OMAKASE_WIFI_SETUP_DIR` | `/opt/omakase/wifi-setup` | non-default install layout |
 | `OMAKASE_BIN_DIR` | `/opt/omakase/bin` | non-default install layout |
@@ -324,7 +324,7 @@ out — uncomment and set what you need.
 | variable | default | when to set |
 |---|---|---|
 | `OMAKASE_API_URL` | `https://www.omakase.ai` | staging/local backend |
-| `OMAKASE_CONV_VERSION` | `v3` | `v1`, `v2`, or `v4` to select a different conversation engine |
+| `OMAKASE_CONV_VERSION` | `v4` | `v1`, `v2`, or `v3` to select a different conversation engine. `start.sh` falls back to `v3` when v4 dependency checks fail. |
 | `LOCALE` | `ja` | conversation locale (`ja` / `en` / …) |
 | `STATUS_SERVER_ENABLED` | `1` | `0` to disable the local status HTTP server |
 | `STATUS_PUSH_ENABLED` | `1` | `0` to stop pushing robot status to omakase.ai |
@@ -334,8 +334,8 @@ out — uncomment and set what you need.
 | `GOOGLE_API_KEY` | image-baked | per-robot override of the Gemini VLM key |
 | `CONVERSATION_LLM_PROVIDER` | `qwen` | swap LLM provider on this robot |
 | `STT_PROVIDER` | `qwen` | swap STT provider on this robot |
-| `QWEN_MODEL` | `qwen3-vl-flash` | pin a different Qwen model |
-| `VLM_MODEL` | `gemini-2.5-flash` | pin a different VLM model |
+| `QWEN_MODEL` | `qwen-turbo` | pin a different Qwen model (text-only default; set to a Qwen-VL model e.g. `qwen3-vl-flash` to enable vision) |
+| `VLM_MODEL` | `gemini-2.5-flash-lite` | pin a different VLM model |
 | `CONVERSATION_VLM_MODEL` | `gemini-2.5-flash-lite` | pin a different conversation VLM |
 | `CONVERSATION_LISTEN_EARLY_MARGIN_S` | `0` | tweak conversation barge-in margin |
 | `MAX_SESSION_DURATION_S` | `300` | cap a single conversation session in seconds |
